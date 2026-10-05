@@ -54,11 +54,11 @@ Given a query that matches no listings, the agent stops before calling
      compares session["selected_item"] against what actually reached
      suggest_outfit is the shape you're after. -->
 
-
+     session["selected_item"]["id"] matches the id of the item received by suggest_outfit in 5 of 5 runs, as verified from the tool input or Unit 4 trace.
 
 **Why this target:**
 
-
+     Choosing the item and passing it to suggest_outfit happens in plain Python through the session. No model is involved, so the same item should reach suggest_outfit on every run. That's why the target is 5 of 5.
 
 ---
 
@@ -75,10 +75,12 @@ Given a query that matches no listings, the agent stops before calling
      sentence? A card longer than a caption anyone would post? Any of those can
      be turned into a number. -->
 
+     The first two sentences of the fit card contain the item's price in 3 of 5 runs.
 
 
 **Why this target:**
 
+     The model writes the fit card, so the wording changes from run to run. Sometimes it may describe the item without stating the price in the first two sentences. That's why I set the target at 3 of 5 and not 5 of 5.
 
 
 ---
@@ -92,12 +94,12 @@ Given a query that matches no listings, the agent stops before calling
      search respects a price ceiling — anything, as long as it names a number
      or an observable outcome. -->
 
+     session["selected_item"]["price"] equals the minimum price among all items in session["search_results"] in 5 of 5 runs.
 
 
 **Why this target:**
 
-
-
+    Picking the cheapest item is one min() call in plain Python, with no model involved. Given the same search results, it always picks the same item, so the target is 5 of 5.
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────────
