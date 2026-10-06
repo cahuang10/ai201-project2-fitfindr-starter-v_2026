@@ -180,10 +180,10 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
         )
 
         system = (
-            "Give brief, general styling advice. Explain what to "
-            "pair the item with, when to wear it, and why the "
-            "combination works. Do not claim the user owns any "
-            "specific clothes."
+            "Give general styling advice in no more than 70 words total. "
+            "Explain what to pair the new item with, when to wear it, "
+            "and why the combination works. "
+            "Do not claim the user owns any specific clothes."
         )
 
     else:
@@ -214,12 +214,13 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
         )
 
         system = (
-            "Suggest up to two brief outfits. Each outfit must "
-            "include the new item. Use only the provided wardrobe "
-            "pieces for the other clothes and accessories. "
-            "Refer to pieces by their exact provided names. "
-            "Explain why each combination works. If there are "
-            "too few suitable pieces, explain what is missing."
+            "Suggest up to two outfits in no more than 100 words total "
+            "across the entire response, including headings and item names. "
+            "Each outfit must include the new item. "
+            "Use only the provided wardrobe pieces for other clothes "
+            "and accessories. Refer to pieces by their exact provided names. "
+            "Give one short sentence explaining why each outfit works. "
+            "If there are too few suitable pieces, explain what is missing."
         )
 
     return generate(prompt, system=system)
