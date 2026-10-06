@@ -160,20 +160,69 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
         raising or returning "". Unit 4 has you trigger the empty wardrobe on
         purpose, so decide now what it should do.
 
-    TODO:
-        1. Check whether wardrobe['items'] is empty.
-        2. If it is, ask the model for general styling ideas for this item.
-        3. If it isn't, format the wardrobe items into the prompt and ask for
-           specific combinations naming pieces the user already owns.
-        4. Return the model's response.
-
     Test it from a terminal before you move on:
         python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
     """
-    # TODO: replace this with your implementation
-    return ""
 
+   # Describe the new item.
+    item_text = (
+        f"New item: {new_item['title']}\n"
+        f"Colors: {', '.join(new_item['colors'])}\n"
+        f"Size: {new_item['size']}\n"
+        f"Style tags: {', '.join(new_item['style_tags'])}"
+    )
 
+    if not wardrobe["items"]:
+        # Empty wardrobe: give general advice.
+        prompt = (
+            f"{item_text}\n\n"
+            "Give me general styling advice for this new item."
+        )
+
+        system = (
+            "Give brief, general styling advice. Explain what to "
+            "pair the item with, when to wear it, and why the "
+            "combination works. Do not claim the user owns any "
+            "specific clothes."
+        )
+
+    else:
+        # Build one line of text per wardrobe item.
+        lines = []
+
+        for item in wardrobe["items"]:
+            details = []
+
+            for key, value in item.items():
+                # Skip missing values, including notes that are None.
+                if value is None:
+                    continue
+
+                field_text = f"{key}: {value}"
+                details.append(field_text)
+
+            item_line = " | ".join(details)
+            lines.append(item_line)
+
+        wardrobe_lines = "\n".join(lines)
+
+        # Include both the new item and the wardrobe.
+        prompt = (
+            f"{item_text}\n\n"
+            f"My wardrobe:\n{wardrobe_lines}\n\n"
+            "Suggest outfits using this new item and my wardrobe."
+        )
+
+        system = (
+            "Suggest up to two brief outfits. Each outfit must "
+            "include the new item. Use only the provided wardrobe "
+            "pieces for the other clothes and accessories. "
+            "Refer to pieces by their exact provided names. "
+            "Explain why each combination works. If there are "
+            "too few suitable pieces, explain what is missing."
+        )
+
+    return generate(prompt, system=system)
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
 
 def create_fit_card(outfit: str, new_item: dict) -> str:
