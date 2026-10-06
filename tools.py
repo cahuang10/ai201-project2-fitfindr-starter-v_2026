@@ -23,9 +23,14 @@ the description has to say what is *in* the list.
 import config  # noqa: F401 — you'll use this in search_listings
 from generate import generate
 from utils.data_loader import load_listings
+import string
 
 
 # ── Tool 1: search_listings ───────────────────────────────────────────────────
+STOP_WORDS = {
+    "a", "an", "the", "for", "and", "or", "with", "in", "on", "of",
+    "to", "my", "i", "me", "some", "something", "under", "looking",
+} # we do not want to make the score based on these words.
 
 def search_listings(
     description: str,
@@ -67,19 +72,72 @@ def search_listings(
     realistic — thrift listings often have no brand. If something you write
     assumes a brand is always there, you will find out in unit 4.
 
-    TODO:
-        1. Load every listing with load_listings().
-        2. Filter by max_price and by size, when each is provided.
-        3. Score what's left by keyword overlap with `description`.
-        4. Drop anything scoring zero.
-        5. Sort by score, highest first, and return the listing dicts —
-           at most config.SEARCH_RESULT_LIMIT of them.
 
     Test it from a terminal before you move on:
         python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
     """
-    # TODO: replace this with your implementation
-    return []
+
+    listings = load_listings()
+    res = []
+
+    # Compute these once, rather than again for every listing.
+    words = [w.strip(string.punctuation) for w in description.lower().split()] # remove the pontautions
+    
+    keywords = set()
+    for w in words:
+        if w and w not in STOP_WORDS:
+            keywords.add(w) # take away the non-descriptive words.
+
+    requested_size = None
+    if size is not None:
+        requested_size = size.split("(")[0].strip().lower()
+
+    for listing in listings:
+        # 1. Skip listings above the user's maximum price.
+        if max_price is not None and listing["price"] > max_price:
+            continue
+
+        # 2. Check size only when the user provided one.
+        if requested_size is not None:
+            listing_size = listing["size"].split("(")[0].strip().lower()
+            size_options = [
+                part.strip()
+                for part in listing_size.split("/")
+            ]
+
+            if requested_size not in size_options:
+                continue
+
+        # 3. Score every listing that passed the filters.
+        searchable_text = " ".join([
+            listing["title"],
+            listing["description"],
+            *listing["style_tags"],
+        ])
+        listing_words = {w.strip(string.punctuation) for w in searchable_text.lower().split()}
+
+        score = 0
+        for keyword in keywords:
+            if keyword in listing_words:
+                score += 1
+
+        if score == 0:
+            continue
+
+        res.append((score, listing))
+
+    # 4. Sort by score, highest first.
+    sorted_res = sorted(
+        res,
+        key=lambda pair: pair[0],
+        reverse=True,
+    )
+
+    # 5. Return the listing dictionaries without their scores.
+    return [
+        listing
+        for score, listing in sorted_res[:config.SEARCH_RESULT_LIMIT]
+    ]
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
