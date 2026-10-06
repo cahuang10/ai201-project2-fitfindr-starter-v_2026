@@ -252,13 +252,55 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         • CACHE_ENABLED — the adapter handed back an answer it already had
         • TEMPERATURE   — at 0.0 the model gives the same words every time
 
-    TODO:
-        1. Guard against an empty or whitespace-only `outfit`.
-        2. Build a prompt with the item details and the outfit.
-        3. Call generate() and return the response.
-
     Test it from a terminal before you move on:
         python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
     """
-    # TODO: replace this with your implementation
-    return ""
+
+
+    # 1. Stop if no outfit suggestion was provided.
+    if not outfit.strip():
+        return (
+            "No outfit suggestion was provided, "
+            "so no fit card could be made."
+        )
+
+    # 2. Format the price.
+    price_text = f"${new_item['price']:.2f}"
+
+    # 3. Describe the item.
+    style_text = ", ".join(new_item["style_tags"])
+
+    item_text = (
+        f"Item: {new_item['title']}\n"
+        f"Price: {price_text}\n"
+        f"Platform: {new_item['platform']}\n"
+        f"Style tags: {style_text}"
+    )
+
+    # 4. Include the item details and outfit in the prompt.
+    prompt = (
+        f"{item_text}\n\n"
+        f"Outfit suggestion:\n{outfit}\n\n"
+        "Write a caption about this find and how to style it."
+    )
+
+    # 5. Set the caption rules.
+    system = (
+        "Write a casual social media caption in 2 to 4 sentences, "
+        "using no more than 80 words total. "
+        "Mention the item once using a natural, shortened version "
+        "of its title. Mention the platform once. "
+        "Mention the exact price as shown in the item details once, "
+        "in the first or second sentence. "
+        "Use at least one provided style tag and describe at least "
+        "one specific pairing from the outfit suggestion. "
+        "Write in first person, as someone sharing a clothing find "
+        "and how they would style it. "
+        "Do not address the reader or encourage them to buy anything. "
+        "State the price neutrally, without calling it cheap or a bargain. "
+        "Use only details provided in the prompt. "
+        "Return only the caption, without headings or bullet points."
+    )
+
+    # 6. Generate and return the caption.
+    return generate(prompt, system=system)
