@@ -40,7 +40,7 @@
 ## What This Does
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
-
+FitFindr takes a plain-language request like "vintage graphic tee under $30, size M" and finds a matching item among secondhand listings from Depop, thredUp, and Poshmark. It suggests one or two outfits that pair the item with clothes the user already owns, then writes a short first-person caption they could post about the find. When nothing in the listings matches, the agent stops before calling the model and tells the user which part of the request to loosen. When the user has no saved wardrobe, it gives general styling advice and doesn't claim they own anything.
 
 
 ---
@@ -59,24 +59,31 @@
 
 ### `search_listings`
 
-- **What it does:** As the name of the function implies. It traverses throught the list of listings to find a match for the item the user is looking for based on their search keys.
+- **What it does:** Filters the listings by price ceiling and size, then ranks what's left by how many of the user's keywords appear in each listing's title, description, and style tags. It does not call the model.
 - **Inputs:** <!-- name and type each: `max_price` (float), not "a price" --> searching critia or filer keywords
-- **Returns:** it should return a dictonary of an item listing
-- **When it has nothing:** it return an empty dictionary or None.
+- **Returns:** A list of listing dicts (each with id, title, description, category, style_tags, size, condition, price, colors, brand, platform), best match first, at most config.SEARCH_RESULT_LIMIT items. Every item has price <= max_price when a ceiling is given.
+- **When it has nothing:** Returns [], an empty list, never None and never an exception. The planning loop branches on this.
+s whose title names the thing searched for.
 
 ### `suggest_outfit`
 
 - **What it does:** It search through the users wardrobe that suggests a good fit based on the item returned form search listing.
-- **Inputs:** an dictionary of an item
-- **Returns:** it returns a arr of dictorary [name, size, price and website]of suggested fit
-- **When it has nothing:** it return an empty dic
+- **Inputs:** new_item (dict) a single listing dict, the item the user is considering; wardrobe (dict) with an items key holding a list of wardrobe item dicts.
+- **Returns:** A non-empty string with up to two outfits in no more than 100 words. Each outfit includes the new item, uses only pieces from the wardrobe, refers to them by their exact names, and gives one sentence on why it works. Wardrobe fields that are None (often notes) are left out of the prompt.
+- **When it has nothing:** If wardrobe["items"] is empty, it returns general styling advice of 70 words or fewer, covering what to pair the item with, when to wear it, and why it works. Its instructions forbid claiming the user owns anything. The check is if not wardrobe["items"] and not if not wardrobe, because the empty wardrobe {"items": []} is itself truthy.
 
 ### `create_fit_card`
 
-- **What it does:** it creates a group of items that would go well together
-- **Inputs:** an listing, and suggested fit.( two dictionary)
+- **What it does:** Asks the model to write a short caption about the item and outfit, the way someone would post about a thrift find.
+- **Inputs:** outfit (str) the text returned by suggest_outfit; new_item (dict) the listing dict for the item.
 - **Returns:** returns an array of dictonary of [name, size, price and website]
-- **When it has nothing:** empty arr
+- **When it has nothing:** A first-person caption of 2 to 4 sentences and no more than 80 words. It mentions the item once (in a shortened, natural form of the title), the platform once, and the exact price (formatted like $38.00) once, in the first or second sentence. It uses at least one of the item's style tags and one specific pairing from the outfit, doesn't address the reader or encourage buying, and uses only details from the prompt.provided, so no fit card could be made." without calling the model.
+
+- **Size rule:** The requested size and each listing size are lowercased, cut at (so XL (oversized) becomes xl), and stripped of spaces. A listing matches if the requested size equals its full size label or one of its /-separated parts. M matches M, S/M, and M/L. S does not match XS, XL (oversized), or US 9, which a plain substring check would accept. Numeric shoe sizes match only with the US prefix, and waist sizes like W30 L30 match only an exact request.
+
+- **Keyword rule:** Query words are lowercased, stripped of punctuation, and filtered against a list of filler words (a, the, for, under, looking, and others) before scoring. Before this filter existed, "a sequin ballgown for prom" matched 10 unrelated listings through "a" and "for", so the empty-search branch could never fire. Listing words get the same punctuation stripping, which lets zip match "Full zip.".
+
+- **limitation:** Scoring checks whether each keyword appears anywhere in the title, description, or tags. It ignores where the keyword appears, so items with the same tags tie and come back in file order. For "vintage graphic tee", the Y2K Baby Tee, the 2003 Tour Graphic Tee, and the Vintage Band Tee all score 3, and the Y2K tee ranks first only because it comes first in the file. Giving title matches extra weight would break these ties in favor of items whose title names the thing searched for.
 
 ---
 
@@ -93,13 +100,16 @@
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
+**Branch rule:** If search_listings returns an empty list, the agent writes a message to session["error"] naming what the user searched for and one constraint to loosen: raise the price ceiling, drop the size, or try other keywords. It then returns the session without calling suggest_outfit or create_fit_card, so fit_card stays None. Otherwise it stores the first result in session["selected_item"] and continues to suggest_outfit, then create_fit_card.
 
 **Where it lives:** `agent.py::run_agent`
 
 **How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+With regex, in agent.py::parse_query. A dollar amount ($30, $12.50) becomes max_price, and the word "size" followed by a letter size (size m, size xxs) becomes size. The parser then removes those matched phrases, and the remaining text becomes the description. Finding and removing use the same pattern variables, so they always agree. Removing the whole matched phrase leaves letters inside other words alone: the "m" in "medium" or "denim" stays. A missing price or size is None, and its filter is skipped.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** <!-- which fields, in what order -->query → parsed (description, size, max_price) → search_results → branch → selected_item → outfit_suggestion → fit_card. Each tool reads its inputs from the session and writes its result back. suggest_outfit gets session["selected_item"] and session["wardrobe"], and create_fit_card gets session["outfit_suggestion"] and session["selected_item"]. The loop uses only the keys defined in new_session().
+
+**Stop Condition:** A counter increases once per step, and trace.check_iterations(count) runs before each step, so the run stops with an error if the count ever passes config.MAX_ITERATIONS. The loop currently runs straight through and stays well under that limit. The guard covers retry logic added later.
 
 ---
 
@@ -110,12 +120,37 @@
      1. One FULL query and its output, pasted as text.
      2. Your three per-tool terminal tests — the command and what it printed. -->
 
+
+
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30, size M'
 
 ```
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   ### Outfit 1
+* **Top:** Y2K Baby Tee — Butterfly Print
+* **Bottoms:** Baggy straight-leg jeans, dark wash
+* **Shoes:** Chunky white sneakers
+* **Accessories:** Black crossbody bag
+
+This balances the fitted Y2K tee with baggy denim and chunky sneakers.
+
+### Outfit 2
+* **Top:** Y2K Baby Tee — Butterfly Print
+* **Outerwear:** Vintage black denim jacket
+* **Bottoms:** Wide-leg khaki trousers
+* **Shoes:** Chunky white sneakers
+* **Accessories:** Black crossbody bag
+
+Layering the vintage denim jacket adds classic texture to the butterfly graphic.
+
+  Fit card: I just found this cute butterfly baby tee on depop for $18.00. It fits right into my y2k wardrobe when I wear it with baggy straight-leg jeans in a dark wash and chunky white sneakers.
+
+
 
 **The three tools, tested one at a time**
 
@@ -161,18 +196,19 @@ I just found these medium wash vintage Levi's 501 jeans on depop for $38.00. I l
 
      "I gave Claude my search_listings spec. It returned None on no match
      instead of an empty list, so I changed it" is the level we want. -->
+I used Claude as a tutor throughout this unit. It reviewed my code, predicted what my tests would show, and explained Python and regex syntax I hadn't used before. For a few pieces it gave me working code after I'd been stuck on them: the stop word filter, and a simpler regex parser. Most of my learning came from running tests it suggested and getting results I didn't expect.
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:*A review of my search_listings, after a rewrite where the price filter, size matching, and scoring all looked right to me.
+- *What came back:*Claude said there was still a bug, and had me predict and then run search_listings('a sequin ballgown for prom'). There's no ballgown in the data, but it returned 10 results. Every listing scored at least 1 because filler words like "a" and "for" appear in almost every description. That meant my empty-search branch could never fire, and criterion 2 would fail every time. Claude suggested a stop-word set and gave me the two lines that filter it out of the keywords.
+- *What I changed:*I added the stop-word filter, but the result was still 10. Running grep on tools.py showed my old line keywords = set(description.lower().split()) was still underneath the new one and overwriting it. I deleted that line, then applied the same punctuation stripping to the listing words. Without it, a search for "zip" missed a jacket whose description says "Full zip.". After both changes, the ballgown query returned 0, 'for the' returned [], and 'zip' found both jackets.
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:*A check of suggest_outfit output against my own system-prompt rules, instead of just reading it and deciding it looked good.
+- *What came back:*Every concrete rule was followed: two outfits, the new item in each, and wardrobe pieces named exactly as written. The one rule the model ignored was "brief", in both the full and empty wardrobe branches, where it wrote about 200 words with headers. Claude pointed out that "brief" was my only vague rule and the only one ignored. It's the same problem as a vague acceptance criterion: if I can't measure it, the model doesn't reliably follow it.
+- *What I changed:*I replaced "brief" with word limits, at most 100 words for outfits and 70 for general advice, and specified that the limit includes headings and item names. I measured the results with wc -w instead of eyeballing them: 86 and 64 words. I used the same approach for create_fit_card, turning "sounds natural" into specific rules (first person, 2 to 4 sentences, price once in sentence one or two, don't address the reader), and checked them with grep.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
