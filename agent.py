@@ -142,25 +142,51 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     # Step 2: search
     count += 1
     trace.check_iterations(count)
-    session["search_results"] = search_listings(...)   # read the args from session["parsed"]
+
+    # ** passes the parsed values as named arguments.
+    session["search_results"] = search_listings(**session["parsed"])
 
     # Step 3: THE BRANCH
-    if ...:
-        session["error"] = ...   # say what the user could change
+    # Stop only when there are no results.
+    if not session["search_results"]:
+        parsed = session["parsed"]
+
+        message = f"No listings matched '{parsed['description']}'. "
+
+        if parsed["max_price"] is not None:
+            message += (
+                f"Try raising your maximum price "
+                f"above ${parsed['max_price']:.2f}."
+            )
+        elif parsed["size"] is not None:
+            message += (
+                f"Try searching without the size "
+                f"'{parsed['size']}' filter."
+            )
+        else:
+            message += "Try different or fewer descriptive keywords."
+
+        session["error"] = message
         return session
 
     # Step 4: select
-    session["selected_item"] = ...
+    session["selected_item"] = session["search_results"][0]
 
     # Step 5: outfit
     count += 1
     trace.check_iterations(count)
-    session["outfit_suggestion"] = suggest_outfit(...)   # read from session
+    session["outfit_suggestion"] = suggest_outfit(
+        session["selected_item"],
+        session["wardrobe"],
+    )
 
     # Step 6: fit card
     count += 1
     trace.check_iterations(count)
-    session["fit_card"] = create_fit_card(...)           # read from session
+    session["fit_card"] = create_fit_card(
+        session["outfit_suggestion"],
+        session["selected_item"],
+    )
 
     return session
 

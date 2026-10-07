@@ -81,12 +81,15 @@ def search_listings(
     res = []
 
     # Compute these once, rather than again for every listing.
-    words = [w.strip(string.punctuation) for w in description.lower().split()] # remove the pontautions
-    
+    words = [
+        w.strip(string.punctuation)
+        for w in description.lower().split()
+    ]
+
     keywords = set()
     for w in words:
         if w and w not in STOP_WORDS:
-            keywords.add(w) # take away the non-descriptive words.
+            keywords.add(w)
 
     requested_size = None
     if size is not None:
@@ -100,12 +103,18 @@ def search_listings(
         # 2. Check size only when the user provided one.
         if requested_size is not None:
             listing_size = listing["size"].split("(")[0].strip().lower()
+
             size_options = [
                 part.strip()
                 for part in listing_size.split("/")
             ]
 
-            if requested_size not in size_options:
+            # Accept the full size label or one of its options.
+            # For a listing marked S/M, accept S/M, S, or M.
+            if (
+                requested_size != listing_size
+                and requested_size not in size_options
+            ):
                 continue
 
         # 3. Score every listing that passed the filters.
@@ -114,12 +123,24 @@ def search_listings(
             listing["description"],
             *listing["style_tags"],
         ])
-        listing_words = {w.strip(string.punctuation) for w in searchable_text.lower().split()}
+
+        listing_words = {
+            w.strip(string.punctuation)
+            for w in searchable_text.lower().split()
+        }
+        
+        title_words = {
+        word.strip(string.punctuation)
+        for word in listing["title"].lower().split()
+    }
 
         score = 0
         for keyword in keywords:
             if keyword in listing_words:
                 score += 1
+                # Give an extra point when the keyword appears in the title.
+                if keyword in title_words:
+                    score += 1
 
         if score == 0:
             continue
@@ -138,7 +159,6 @@ def search_listings(
         listing
         for score, listing in sorted_res[:config.SEARCH_RESULT_LIMIT]
     ]
-
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
 
