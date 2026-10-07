@@ -79,7 +79,7 @@ s whose title names the thing searched for.
 - **Returns:** returns an array of dictonary of [name, size, price and website]
 - **When it has nothing:** A first-person caption of 2 to 4 sentences and no more than 80 words. It mentions the item once (in a shortened, natural form of the title), the platform once, and the exact price (formatted like $38.00) once, in the first or second sentence. It uses at least one of the item's style tags and one specific pairing from the outfit, doesn't address the reader or encourage buying, and uses only details from the prompt.provided, so no fit card could be made." without calling the model.
 
-### Things to consider about the tools above 
+### `Search rules and limitations` 
 
 - **Size rule:** The requested size and each listing size are lowercased, cut at (so XL (oversized) becomes xl), and stripped of spaces. A listing matches if the requested size equals its full size label or one of its /-separated parts. M matches M, S/M, and M/L. S does not match XS, XL (oversized), or US 9, which a plain substring check would accept. Numeric shoe sizes match only with the US prefix, and waist sizes like W30 L30 match only an exact request.
 
