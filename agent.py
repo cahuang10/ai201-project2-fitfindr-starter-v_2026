@@ -15,8 +15,10 @@ Build and test your three tools in `tools.py` first. Then come here.
 
 import config
 import trace
+import re
 from tools import search_listings, suggest_outfit, create_fit_card
 from generate import ModelUnavailable
+
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -46,6 +48,29 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "error": None,               # set when the run ended early
     }
 
+# ── parsing for agent.loop ─────────────────────────────────────────────────────────────
+
+PRICE_PATTERN = r"\$(\d+\.?\d*)"     # $30, $12.50
+SIZE_PATTERN = r"\bsize\s+(\w+)"     # size m, size xl, size xxs
+
+def parse_query(query: str) -> dict:
+    """Pull description, size, and max_price out of plain text."""
+    text = query.lower()
+
+    # Price: find it, check it exists, then extract.
+    price_match = re.search(PRICE_PATTERN, text)
+    max_price = float(price_match.group(1)) if price_match else None
+
+    # Size: same shape.
+    size_match = re.search(SIZE_PATTERN, text)
+    size = size_match.group(1) if size_match else None
+
+    # Description: remove the matched phrases, not the values.
+    description = re.sub(PRICE_PATTERN, "", text)
+    description = re.sub(SIZE_PATTERN, "", description)
+    description = " ".join(description.split())   # collapse leftover spaces
+
+    return {"description": description, "size": size, "max_price": max_price}
 
 # ── planning loop ─────────────────────────────────────────────────────────────
 
@@ -105,10 +130,38 @@ def run_agent(query: str, wardrobe: dict) -> dict:
       • A handler for ModelUnavailable, so a bad key produces a message rather
         than a stack trace. The import is already at the top of this file.
     """
-    session = new_session(query, wardrobe)
 
-    # TODO: delete these two lines and build the loop.
-    session["error"] = "The planning loop isn't built yet — see the TODO in agent.py."
+    session = new_session(query, wardrobe)
+    count = 0
+
+    # Step 1: parse
+    count += 1
+    trace.check_iterations(count)
+    session["parsed"] = parse_query(query)
+
+    # Step 2: search
+    count += 1
+    trace.check_iterations(count)
+    session["search_results"] = search_listings(...)   # read the args from session["parsed"]
+
+    # Step 3: THE BRANCH
+    if ...:
+        session["error"] = ...   # say what the user could change
+        return session
+
+    # Step 4: select
+    session["selected_item"] = ...
+
+    # Step 5: outfit
+    count += 1
+    trace.check_iterations(count)
+    session["outfit_suggestion"] = suggest_outfit(...)   # read from session
+
+    # Step 6: fit card
+    count += 1
+    trace.check_iterations(count)
+    session["fit_card"] = create_fit_card(...)           # read from session
+
     return session
 
 
