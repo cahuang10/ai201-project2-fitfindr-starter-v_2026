@@ -67,25 +67,34 @@ from tools import search_listings as _search_listings_impl  # noqa: F401 — you
 mcp = FastMCP("fitfindr", log_level="WARNING")
 
 
-# ── TODO: uncomment and fill this in ──────────────────────────────────────────
-#
-# @mcp.tool()
-# def search_listings(
-#     description: str,
-#     size: str | None = None,
-#     max_price: float | None = None,
-# ) -> list[dict]:
-#     """
-#     <-- YOUR DESCRIPTION GOES HERE.
-#
-#         One or two sentences. What does this tool do, what does it need, and
-#         what does it give back when it finds nothing? Written for a reader
-#         who cannot see the code.
-#     """
-#     return _search_listings_impl(description, size, max_price)
-#
-# ──────────────────────────────────────────────────────────────────────────────
-#
+@mcp.tool()
+def search_listings(
+    description: str,
+    size: str | None = None,
+    max_price: float | None = None,
+) -> list[dict]:
+    """
+    Search thrift listings by matching keywords from the `description` argument
+    against each listing's title, description text, and `style_tags`, ranked by
+    how many keywords match, with title matches counting extra.
+
+    `max_price` is in US dollars and inclusive: listings priced at or under it
+    are kept. If omitted, no price filter is applied.
+
+    `size` is optional and case-insensitive. A listing matches if `size` equals
+    its full size label or one of its `/`-separated parts (`M` matches `S/M` and
+    `M/L`, but `S` does not match `XS` or `XL`). Shoe sizes must include the US
+    prefix ("US 8", not "8"); waist sizes like `W30` match only exactly. If
+    omitted, no size filter is applied.
+
+    Returns up to 10 listing dicts, best match first, each with: id, title,
+    description, category, style_tags, size, condition, price, colors, brand
+    (often null), platform. Returns [] when nothing matches, or when
+    `description` contains nothing but filler words (e.g. "for", "the",
+    "something"). Never raises on no match.
+    """
+    return _search_listings_impl(description, size, max_price)
+
 # Two notes on the block above.
 #
 # The registered name is the *function* name — so the block above registers

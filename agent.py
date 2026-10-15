@@ -18,6 +18,7 @@ import trace
 import re
 from tools import search_listings, suggest_outfit, create_fit_card
 from generate import ModelUnavailable
+from mcp_client import call_tool  
 
 
 
@@ -144,7 +145,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     trace.check_iterations(count)
 
     # ** passes the parsed values as named arguments.
-    session["search_results"] = search_listings(**session["parsed"])
+    session["search_results"] = call_tool("search_listings", session["parsed"])
 
     # Step 3: THE BRANCH
     # Stop only when there are no results.
