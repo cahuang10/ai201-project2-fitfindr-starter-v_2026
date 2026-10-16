@@ -132,65 +132,71 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         than a stack trace. The import is already at the top of this file.
     """
 
+    """
+    The rule is that every step that calls a function records its inputs. The branch steps don’t call anything; they make a decision. So instead of inputs they get a note= saying why.
+    """
+
     session = new_session(query, wardrobe)
-    count = 0
+    trace.start_trace()
+    step = 0
 
     # Step 1: parse
-    count += 1
-    trace.check_iterations(count)
+    step += 1
+    trace.check_iterations(step)
     session["parsed"] = parse_query(query)
+    trace.step("parse_query", inputs=query, returned=str(session["parsed"]))
 
-    # Step 2: search
-    count += 1
-    trace.check_iterations(count)
-
-    # ** passes the parsed values as named arguments.
+    # Step 2: search (via MCP)
+    step += 1
+    trace.check_iterations(step)
     session["search_results"] = call_tool("search_listings", session["parsed"])
+    trace.step("search_listings (via MCP)", inputs=str(session["parsed"]),
+               returned=session["search_results"])
 
-    # Step 3: THE BRANCH
-    # Stop only when there are no results.
+    # Step 3: the branch
     if not session["search_results"]:
         parsed = session["parsed"]
-
         message = f"No listings matched '{parsed['description']}'. "
-
         if parsed["max_price"] is not None:
-            message += (
-                f"Try raising your maximum price "
-                f"above ${parsed['max_price']:.2f}."
-            )
+            message += f"Try raising your maximum price above ${parsed['max_price']:.2f}."
         elif parsed["size"] is not None:
-            message += (
-                f"Try searching without the size "
-                f"'{parsed['size']}' filter."
-            )
+            message += f"Try searching without the size '{parsed['size']}' filter."
         else:
             message += "Try different or fewer descriptive keywords."
 
         session["error"] = message
+        trace.step("branch", note="no results → stopping")
         return session
 
     # Step 4: select
     session["selected_item"] = session["search_results"][0]
+    trace.step("branch", returned=session["selected_item"],
+               note="results found → taking the first one")
 
     # Step 5: outfit
-    count += 1
-    trace.check_iterations(count)
-    session["outfit_suggestion"] = suggest_outfit(
-        session["selected_item"],
-        session["wardrobe"],
-    )
+    try:
+        step += 1
+        trace.check_iterations(step)
+        session["outfit_suggestion"] = suggest_outfit(session["selected_item"], session["wardrobe"])
+        trace.step("suggest_outfit",
+                inputs=f"wardrobe has {len(session['wardrobe']['items'])} items",
+                returned=session["outfit_suggestion"])
 
-    # Step 6: fit card
-    count += 1
-    trace.check_iterations(count)
-    session["fit_card"] = create_fit_card(
-        session["outfit_suggestion"],
-        session["selected_item"],
-    )
+        # Step 6: fit card
+        step += 1
+        trace.check_iterations(step)
+        session["fit_card"] = create_fit_card(session["outfit_suggestion"], session["selected_item"])
+        trace.step("create_fit_card", returned=session["fit_card"])
+
+    except ModelUnavailable as exc:
+        session["error"] = (
+            "Found a match, but couldn't reach the model to style it. "
+            "Check GEMINI_API_KEY in .env and try again."
+        )
+        trace.step("model unavailable", returned=str(exc), note="stopping, no outfit or fit card")
+        return session # this is for bad API call
 
     return session
-
 
 # ── running it directly ───────────────────────────────────────────────────────
 

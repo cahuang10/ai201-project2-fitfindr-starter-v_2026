@@ -295,20 +295,102 @@ that produced it:
 
 ```
 
+$ python app.py ask 'vintage graphic tee under $30' --trace
+[1] parse_query
+      in:  vintage graphic tee under $30
+      out: {'description': 'vintage graphic tee under', 'size': None, 'max_price': 30.0}
+[2] search_listings (via MCP)
+      in:  {'description': 'vintage graphic tee under', 'size': None, 'max_price': 30.0}
+      out: 10 items: Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey, Y2K Baby Tee — Butterfly Print … +7 more
+[3] branch
+      out: Graphic Tee — 2003 Tour Bootleg Style ($24.0, depop)
+      →    results found → taking the first one
+[4] suggest_outfit
+      in:  wardrobe has 10 items
+      out: ### Outfit 1 * Graphic Tee — 2003 Tour Bootleg Style * Baggy straight-leg jeans, dark wash * Black combat boot…
+[5] create_fit_card
+      out: I just scored this graphic tee on depop for $24.00 and I am obsessed with the vintage vibe. It fits right into…
+
 ```
 
 **Empty search**
 
 ```
+$ python app.py ask 'designer ballgown size XXS under $5' --trace
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: {'description': 'designer ballgown under', 'size': 'xxs', 'max_price': 5.0}
+[2] search_listings (via MCP)
+      in:  {'description': 'designer ballgown under', 'size': 'xxs', 'max_price': 5.0}
+      out: [] (empty)
+[3] branch
+      →    no results → stopping
+
+  No listings matched 'designer ballgown under'. Try raising your maximum price above $5.00.
 
 ```
+The empty-search trace stops at step 3 and never reaches `suggest_outfit` or `create_fit_card`, so the branch in `agent.py::run_agent` is working. The happy path runs all five steps.
+
+## Failure Modes
+
+**1. Empty search.** Triggered with an impossible query (`'designer ballgown size XXS under $5'`). Handled by the branch in `agent.py::run_agent`: it stops after search, sets `session["error"]` with a suggestion for what to change, and never calls the model. See the empty-search trace above.
+
+**2. Empty wardrobe.** Triggered with `--empty-wardrobe`. Handled in `tools.py::suggest_outfit`, which switches to a general-advice prompt when `wardrobe["items"]` is empty.
+
+```
+$ python app.py ask 'denim jacket under $50' --empty-wardrobe --trace
+(running with an empty wardrobe)
+[1] parse_query
+      in:  denim jacket under $50
+      out: {'description': 'denim jacket under', 'size': None, 'max_price': 50.0}
+[2] search_listings (via MCP)
+      in:  {'description': 'denim jacket under', 'size': None, 'max_price': 50.0}
+      out: 7 items: Denim Jacket — Light Wash, Cropped, 90s Track Jacket — Navy/White Stripe, High-Waisted Denim Shorts — Cutoff … +4 more
+[3] branch
+      out: Denim Jacket — Light Wash, Cropped ($42.0, poshmark)
+      →    results found → taking the first one
+[4] suggest_outfit
+      in:  wardrobe has 0 items
+      out: Pair the light wash, cropped denim jacket with high-waisted black trousers and a fitted white crop top. Wear t…
+[5] create_fit_card
+      out: I just scored this light wash cropped denim jacket on poshmark for $42.00! It has such a cool vintage vibe. I …
+```
+
+The outfit gives general advice and doesn't claim the user owns anything. One thing I noticed: the fit card says "I am definitely going to wear it with a fitted white crop top and high-waisted black trousers," which turns that general advice into a first-person plan for pieces the user doesn't have.
+
+**3. Model unreachable.** Triggered by changing one character of `GEMINI_API_KEY` in `.env`, with `CACHE_ENABLED = False` so cached answers couldn't hide the failure. Handled by `except ModelUnavailable` around the two model-calling steps in `agent.py::run_agent`: it sets `session["error"]`, records a trace step, and returns the session instead of crashing.
+
+```
+$ python app.py ask 'vintage graphic tee under $30' --trace
+[1] parse_query
+      in:  vintage graphic tee under $30
+      out: {'description': 'vintage graphic tee under', 'size': None, 'max_price': 30.0}
+[2] search_listings (via MCP)
+      in:  {'description': 'vintage graphic tee under', 'size': None, 'max_price': 30.0}
+      out: 10 items: Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey, Y2K Baby Tee — Butterfly Print … +7 more
+[3] branch
+      out: Graphic Tee — 2003 Tour Bootleg Style ($24.0, depop)
+      →    results found → taking the first one
+[4] model unavailable
+      out: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.goo…
+      →    stopping, no outfit or fit card
+
+  Found a match, but couldn't reach the model to style it. Check GEMINI_API_KEY in .env and try again.
+```
+The handler took three tries. On the first, the try/except was never saved to agent.py, so app.py’s catch-all handler caught the error and the trace stopped at step 3. On the second, the last return session sat inside the except block, which would have made every successful run return None. Testing the bad-key path and the happy path caught both.
 
 **On the MCP move:** <!-- what changed in your code, and whether anything
 behaved differently afterwards. If the rewire didn't work, say exactly where it
 broke — the error text and the last thing that worked. That earns the point in
 full. -->
 
+I registered search_listings in mcp_server.py with a description written for outside callers (size rules, US-prefix shoe sizes, the empty cases). agent.py::run_agent now calls it through mcp_client.call_tool instead of directly. I checked it with check_mcp_parity.py: 5 cases, including two that return [], came back identical both ways, so nothing behaved differently.
 
+SAME      direct=10  mcp=10  {'description': 'vintage graphic tee', 'size': None, 'max_price': 30.0}
+SAME      direct= 2  mcp= 2  {'description': 'mesh top', 'size': 'M', 'max_price': None}
+SAME      direct= 1  mcp= 1  {'description': 'platform sneakers', 'size': 'US 8', 'max_price': None}
+SAME      direct= 0  mcp= 0  {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+SAME      direct= 0  mcp= 0  {'description': 'something for me', 'size': None, 'max_price': None}
 
 ---
 
