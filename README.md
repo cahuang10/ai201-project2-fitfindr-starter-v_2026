@@ -413,11 +413,13 @@ full. -->
 
 I registered search_listings in mcp_server.py with a description written for outside callers (size rules, US-prefix shoe sizes, the empty cases). agent.py::run_agent now calls it through mcp_client.call_tool instead of directly. I checked it with check_mcp_parity.py: 5 cases, including two that return [], came back identical both ways, so nothing behaved differently.
 
+```
 SAME      direct=10  mcp=10  {'description': 'vintage graphic tee', 'size': None, 'max_price': 30.0}
 SAME      direct= 2  mcp= 2  {'description': 'mesh top', 'size': 'M', 'max_price': None}
 SAME      direct= 1  mcp= 1  {'description': 'platform sneakers', 'size': 'US 8', 'max_price': None}
 SAME      direct= 0  mcp= 0  {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
 SAME      direct= 0  mcp= 0  {'description': 'something for me', 'size': None, 'max_price': None}
+```
 
 ---
 
@@ -444,9 +446,9 @@ I also updated the branch step's trace note to record the cheapest price in the 
 
 **Which failure it was meant to fix:** 
 
-```
+
 Criterion 5, which was MISSED 0/5 in the Before run. For "denim jacket under $50," the agent picked the Denim Jacket at $42.00 (`lst_007`) in all five tries, while the cheapest result was the High-Waisted Denim Shorts at $24.00 (`lst_016`). The cause was the selection rule in `run_agent`, not the search tool: `search_listings` returned seven valid listings under $50, ranked by keyword match as designed, and the loop always used the first one.
-```
+
 
 ### Run Log — After
 
@@ -466,22 +468,22 @@ Full output for every try: `results/run_2026-10-16_1817_after.md`
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
 
-```
+
 Did it help? Yes for criterion 5: it went from 0/5 to 5/5, and the trace now records the cheapest price in each run, so the verdict can be checked from the run log alone. But the fix ignores how well an item matches. For “denim jacket under $50” the agent now picks High-Waisted Denim Shorts ($24) instead of the Denim Jacket ($42). For “vintage graphic tee under $30” it picks a Mesh Long-Sleeve Top ($15), which search ranked 6th of 10, even though two real tees were also under $20 (Vintage Band Tee $19, Y2K Baby Tee $18). Criteria 1, 3, and 4 still passed because none of them check what kind of item was picked. Cheapest makes sense for someone on a budget, but only among items that are actually what they searched for. A better rule would be the cheapest among the strongest matches, and that’s a change for next time.
 
-```
+
 
 ---
 
 ## What's Still Broken
 
-```
+
 1. **The cheapest rule ignores match quality.** I changed the selection to meet criterion 5 as written, but now the agent picks shorts for a denim jacket query and a mesh top for a graphic tee query. Picking the cheapest among the strongest matches would fix that.
 2. **Bare shoe sizes return nothing.** `parse_query` turns "platform sneakers size 8" into `size="8"`, but `search_listings` only matches shoe sizes written as "US 8", so the user gets "No listings matched" even though matching sneakers exist.
 3. **"under" leaks into the error message.** `parse_query` removes the price but leaves the word "under" in the description. Search ignores it as a stop word, but the user sees "No listings matched 'designer ballgown under'."
 4. **The fit card invents ownership.** With an empty wardrobe, `suggest_outfit` correctly gives general advice, but `create_fit_card` rewrites it as "I'm planning to wear it with a white tank top…", as if the user owns those pieces.
 5. **Criterion 3's check can't fail.** The trace builds `item id=` from `session["selected_item"]`, the same value being checked. Recording the id inside `suggest_outfit` would make it a real test.
-```
+
 
 <!-- For each criterion still missed: what you'd do, and why you stopped where
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
