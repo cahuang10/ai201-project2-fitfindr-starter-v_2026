@@ -198,9 +198,7 @@ I just found these medium wash vintage Levi's 501 jeans on depop for $38.00. I l
 
      "I gave Claude my search_listings spec. It returned None on no match
      instead of an empty list, so I changed it" is the level we want. -->
-I used Claude as a tutor throughout this unit. It reviewed my code, predicted what my tests would show, and explained Python and regex syntax I hadn't used before. For a few pieces it gave me working code after I'd been stuck on them: the stop word filter, and a simpler regex parser. Most of my learning came from running tests it suggested and getting results I didn't expect.
-
-I also used to figure how to turn my searching tool into a MCP tool. 
+I used Claude as a tutor throughout this unit. It reviewed my code, predicted what my tests would show, and explained Python and regex syntax I hadn't used before. For a few pieces it gave me working code after I'd been stuck on them: the stop word filter, and a simpler regex parser. Most of my learning came from running tests it suggested and getting results I didn't expect. I also used to figure how to turn my searching tool into a MCP tool. 
 
 **Moment 1**
 
