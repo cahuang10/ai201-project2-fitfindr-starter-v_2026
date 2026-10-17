@@ -200,6 +200,8 @@ I just found these medium wash vintage Levi's 501 jeans on depop for $38.00. I l
      instead of an empty list, so I changed it" is the level we want. -->
 I used Claude as a tutor throughout this unit. It reviewed my code, predicted what my tests would show, and explained Python and regex syntax I hadn't used before. For a few pieces it gave me working code after I'd been stuck on them: the stop word filter, and a simpler regex parser. Most of my learning came from running tests it suggested and getting results I didn't expect.
 
+I also used to figure how to turn my searching tool into a MCP tool. 
+
 **Moment 1**
 
 - *What I asked for:*A review of my search_listings, after a rewrite where the price filter, size matching, and scoring all looked right to me.
@@ -232,20 +234,43 @@ I used Claude as a tutor throughout this unit. It reviewed my code, predicted wh
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all three tools | ≥4 of 5 | PASS | PASS | PASS | PASS | PASS |  |
+| 2. Impossible query stops before suggest_outfit | 5 of 5 | PASS | PASS | PASS | PASS | PASS |  |
+| empty wardrobe _(diagnostic)_ | — | | | | | | 5/5 gave general advice, no ownership claims |
+| 3. Selected item id reaches suggest_outfit | 5 of 5 | PASS | PASS | PASS | PASS | PASS |  |
+| 4. Price in the fit card's first two sentences | 3 of 5 | PASS | PASS | PASS | PASS | PASS |  |
+| 5. Selected item is the cheapest result | 5 of 5 | FAIL | FAIL | FAIL | FAIL | FAIL |  |
+
+Full output for every try: `results/run_2026-10-16_1727_before.md`
 
 **Real output from one try**, pasted as text, naming the file and function
 that produced it:
 
-```
+From `results/run_2026-10-16_1727_before.md`, written by `run_eval.py::main`, which calls `agent.py::run_agent`. Scenario "matching query completes" (criterion 1), try 1:
 
 ```
+- stopped early: no
+- selected_item: Graphic Tee — 2003 Tour Bootleg Style ($24.0, depop)
+- search_results: 10
 
----
+[1] parse_query
+      in:  vintage graphic tee under $30
+      out: {'description': 'vintage graphic tee under', 'size': None, 'max_price': 30.0}
+[2] search_listings (via MCP)
+      in:  {'description': 'vintage graphic tee under', 'size': None, 'max_price': 30.0}
+      out: 10 items: Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey, Y2K Baby Tee — Butterfly Print … +7 more
+[3] branch
+      out: Graphic Tee — 2003 Tour Bootleg Style ($24.0, depop)
+      →    results found → taking the first one
+[4] suggest_outfit
+      in:  item id=lst_006, wardrobe has 10 items
+      out: **Outfit 1: Streetwear Grunge** - Graphic Tee — 2003 Tour Bootleg Style - Baggy straight-leg jeans, dark wash …
+[5] create_fit_card
+      out: Just scored this vintage graphic tee on depop for $24.00. I love finding unique band tees for my grunge rotati…
+
+Fit card:
+Just scored this vintage graphic tee on depop for $24.00. I love finding unique band tees for my grunge rotation. I'm styling it today with baggy straight-leg jeans in a dark wash and black combat boots.
+```
 
 ## Verdicts and Diagnoses
 
@@ -265,17 +290,21 @@ that produced it:
      Look for a pattern. Three misses on the same tool is one problem, not
      three. -->
 
-| # | Criterion | Target | Verdict | How I decided |
-|---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1. Matching query completes all three tools | ≥4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before suggest_outfit | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| empty wardrobe _(diagnostic)_ | — | | | | | | 5/5 gave general advice, no ownership claims |
+| 3. Selected item id reaches suggest_outfit | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Price in the fit card's first two sentences | 3 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Selected item is the cheapest result | 5 of 5 | FAIL | FAIL | FAIL | FAIL | FAIL | MISSED (0/5) |
+
 
 **Diagnoses**
 
-
+```
+Criterion 5: MISSED (0/5). Place: the loop, specifically the selection step in agent.py::run_agent (Step 4: session["selected_item"] = session["search_results"][0]). It always takes the first search result, which is the item with the highest keyword-match score, not the lowest price. For “denim jacket under $50,” the top match was Denim Jacket — Light Wash, Cropped (lst_007) at $42.00, because “denim” and “jacket” both appear in its title. The cheapest result was High-Waisted Denim Shorts (lst_016) at $24.00, which ranked third. search_listings worked correctly: it returned 7 valid listings, all under $50 and ranked by match score as designed. The tool did its job; the loop chose by the wrong rule. The same item was chosen in all 5 tries because selection doesn’t involve the model, so this miss is deterministic, not random.
+```
 
 ---
 
@@ -402,33 +431,64 @@ SAME      direct= 0  mcp= 0  {'description': 'something for me', 'size': None, '
      `python run_eval.py --label after` -->
 
 **What I changed:**
+One line in `agent.py::run_agent`, Step 4. The agent used to take the first search result, which is the best keyword match:
 
-**Which failure it was meant to fix:**
+```
+session["selected_item"] = session["search_results"][0]
+```
+
+It now takes the cheapest result:
+
+```
+session["selected_item"] = min(session["search_results"], key=lambda r: r["price"])
+```
+I also updated the branch step's trace note to record the cheapest price in the results ("taking the cheapest of 7 (cheapest in results: $24.00)"). That only changes what the trace records, not what the agent does, but it means criterion 5 can be checked from the run log alone.
+
+**Which failure it was meant to fix:** 
+
+```
+Criterion 5, which was MISSED 0/5 in the Before run. For "denim jacket under $50," the agent picked the Denim Jacket at $42.00 (`lst_007`) in all five tries, while the cheapest result was the High-Waisted Denim Shorts at $24.00 (`lst_016`). The cause was the selection rule in `run_agent`, not the search tool: `search_listings` returned seven valid listings under $50, ranked by keyword match as designed, and the loop always used the first one.
+```
 
 ### Run Log — After
 
-| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+ Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all three tools | ≥4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before suggest_outfit | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| empty wardrobe _(diagnostic)_ | — | | | | | | 5/5 general advice; now picks shorts, not the jacket |
+| 3. Selected item id reaches suggest_outfit | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Price in the fit card's first two sentences | 3 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Selected item is the cheapest result | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+Full output for every try: `results/run_2026-10-16_1817_after.md`
 
 **Did it help, and how do I know:**
 
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
 
+```
+Did it help? Yes for criterion 5: it went from 0/5 to 5/5, and the trace now records the cheapest price in each run, so the verdict can be checked from the run log alone. But the fix ignores how well an item matches. For “denim jacket under $50” the agent now picks High-Waisted Denim Shorts ($24) instead of the Denim Jacket ($42). For “vintage graphic tee under $30” it picks a Mesh Long-Sleeve Top ($15), which search ranked 6th of 10, even though two real tees were also under $20 (Vintage Band Tee $19, Y2K Baby Tee $18). Criteria 1, 3, and 4 still passed because none of them check what kind of item was picked. Cheapest makes sense for someone on a budget, but only among items that are actually what they searched for. A better rule would be the cheapest among the strongest matches, and that’s a change for next time.
 
+```
 
 ---
 
 ## What's Still Broken
 
+```
+1. **The cheapest rule ignores match quality.** I changed the selection to meet criterion 5 as written, but now the agent picks shorts for a denim jacket query and a mesh top for a graphic tee query. Picking the cheapest among the strongest matches would fix that.
+2. **Bare shoe sizes return nothing.** `parse_query` turns "platform sneakers size 8" into `size="8"`, but `search_listings` only matches shoe sizes written as "US 8", so the user gets "No listings matched" even though matching sneakers exist.
+3. **"under" leaks into the error message.** `parse_query` removes the price but leaves the word "under" in the description. Search ignores it as a stop word, but the user sees "No listings matched 'designer ballgown under'."
+4. **The fit card invents ownership.** With an empty wardrobe, `suggest_outfit` correctly gives general advice, but `create_fit_card` rewrites it as "I'm planning to wear it with a white tank top…", as if the user owns those pieces.
+5. **Criterion 3's check can't fail.** The trace builds `item id=` from `session["selected_item"]`, the same value being checked. Recording the id inside `suggest_outfit` would make it a real test.
+```
+
 <!-- For each criterion still missed: what you'd do, and why you stopped where
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
+
 
 
 
