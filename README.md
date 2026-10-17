@@ -300,9 +300,8 @@ Just scored this vintage graphic tee on depop for $24.00. I love finding unique 
 
 **Diagnoses**
 
-```
 Criterion 5: MISSED (0/5). Place: the loop, specifically the selection step in agent.py::run_agent (Step 4: session["selected_item"] = session["search_results"][0]). It always takes the first search result, which is the item with the highest keyword-match score, not the lowest price. For “denim jacket under $50,” the top match was Denim Jacket — Light Wash, Cropped (lst_007) at $42.00, because “denim” and “jacket” both appear in its title. The cheapest result was High-Waisted Denim Shorts (lst_016) at $24.00, which ranked third. search_listings worked correctly: it returned 7 valid listings, all under $50 and ranked by match score as designed. The tool did its job; the loop chose by the wrong rule. The same item was chosen in all 5 tries because selection doesn’t involve the model, so this miss is deterministic, not random.
-```
+
 
 ---
 
